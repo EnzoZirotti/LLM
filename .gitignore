@@ -1,0 +1,13 @@
+# Model weights stay on this machine. Do not commit them.
+models/
+*.gguf
+*.bin
+ollama-serve.log
+workspace/
+memory/
+projects/
+chats/
+venvs/
+__pycache__/
+*.pyc
+*.exe

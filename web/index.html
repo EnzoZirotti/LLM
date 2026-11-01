@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local chat</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #171614;
+      --panel: #221f1c;
+      --line: #3a342c;
+      --text: #f3efe6;
+      --muted: #a3988a;
+      --user: #3c3328;
+      --accent: #e4a15a;
+      --danger: #e07a68;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 "Segoe UI", sans-serif;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+    }
+
+    .app {
+      width: min(820px, 100%);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 0 20px 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 4px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    button, textarea {
+      font: inherit;
+    }
+
+    .ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    .ghost:hover { color: var(--text); border-color: var(--muted); }
+
+    a.ghost { text-decoration: none; display: inline-block; }
+    header nav { display: flex; gap: 8px; align-items: center; }
+
+    .history {
+      max-height: 180px;
+      overflow: auto;
+      border-bottom: 1px solid var(--line);
+      margin: 0 4px;
+    }
+    .history-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .history-row button.open {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      background: transparent;
+      color: var(--text);
+      border: 0;
+      padding: 8px 2px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-row.current button.open { color: var(--accent); }
+    .history-row .when { color: var(--muted); font-size: 12px; flex: none; }
+    .history-row button.remove {
+      flex: none;
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      cursor: pointer;
+      padding: 8px 2px;
+    }
+    .history-empty { color: var(--muted); font-size: 13px; margin: 10px 2px; }
+    .refs { color: var(--muted); font-size: 13px; padding: 8px 4px 0; }
+    .refs button {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin: 0 4px 4px 0;
+      cursor: pointer;
+    }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 22px 4px 12px;
+    }
+
+    .empty {
+      margin-top: 18vh;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty strong {
+      display: block;
+      color: var(--text);
+      font-size: 22px;
+      font-weight: 650;
+      margin-bottom: 8px;
+    }
+
+    .msg {
+      display: flex;
+      margin: 0 0 16px;
+    }
+
+    .msg.user { justify-content: flex-end; }
+
+    .bubble {
+      max-width: min(680px, 92%);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .msg.user .bubble {
+      background: var(--user);
+      border-radius: 16px 16px 4px 16px;
+      padding: 10px 14px;
+    }
+
+    .msg.assistant .bubble {
+      padding: 2px 0;
+    }
+
+    .thinking {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+      border-left: 2px solid var(--line);
+      padding-left: 10px;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 14px;
+      min-height: 1.2em;
+      padding: 0 4px 8px;
+    }
+    .status.warn { color: var(--accent); }
+    .status.stuck, .status.error { color: var(--danger); }
+    .meter {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 4px 6px;
+    }
+    .meter-track {
+      flex: 1;
+      height: 8px;
+      background: #2c2824;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 0.45s ease;
+    }
+    .meter.stuck .meter-fill { background: var(--danger); }
+    .meter-pct { min-width: 3.2em; text-align: right; color: var(--muted); font-size: 13px; }
+    .meter.near .meter-pct { color: #8fbf8a; font-weight: 650; }
+
+    form {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 10px;
+    }
+
+    textarea {
+      flex: 1;
+      resize: none;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      min-height: 28px;
+      max-height: 160px;
+      padding: 6px 8px;
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    #send {
+      background: var(--accent);
+      color: #23180e;
+      border: 0;
+      border-radius: 12px;
+      padding: 8px 14px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    #send:disabled { opacity: 0.55; cursor: default; }
+
+    code {
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.92em;
+      background: #2c2824;
+      padding: 0 4px;
+      border-radius: 4px;
+    }
+
+    pre {
+      background: #2c2824;
+      padding: 12px;
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+
+    pre code { background: transparent; padding: 0; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Local chat</h1>
+        <p class="meta">Qwen 3.6 27B · turns off after 10 minutes unused</p>
+      </div>
+      <nav>
+        <a class="ghost" href="/swarm.html">Swarm</a>
+        <button class="ghost" id="historyToggle" type="button">History</button>
+        <button class="ghost" id="stopModel" type="button">Stop model</button>
+        <button class="ghost" id="clear" type="button">New chat</button>
+      </nav>
+    </header>
+    <div id="history" class="history" hidden></div>
+    <div id="refsLine" class="refs" hidden></div>
+    <div id="log">
+      <div class="empty" id="empty">
+        <strong>Ask anything</strong>
+        Prompts in this chat stay one series. New chat starts a different project. Earlier chats are used when they have something this one needs.
+      </div>
+    </div>
+    <div class="meter" id="meter" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Reply progress">
+      <div class="meter-track"><div class="meter-fill" id="meterFill"></div></div>
+      <span class="meter-pct" id="meterPct">0%</span>
+    </div>
+    <div class="status" id="status"></div>
+    <form id="composer">
+      <textarea id="input" rows="1" placeholder="Message" autofocus></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+  <script>
+    const MODEL = "qwen3.6:27b";
+    const log = document.getElementById("log");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+    const status = document.getElementById("status");
+    const meter = document.getElementById("meter");
+    const meterFill = document.getElementById("meterFill");
+    const meterPct = document.getElementById("meterPct");
+    const empty = document.getElementById("empty");
+    let messages = [];
+    let chatId = localStorage.getItem("chat-current") || "";
+    let pinned = [];
+    let titles = {};
+    let viewGen = 0;
+    let controller = null;
+    const history = document.getElementById("history");
+
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderText(text) {
+      const parts = escapeHtml(text).split(/```/);
+      return parts.map((part, i) => {
+        if (i % 2 === 1) {
+          const nl = part.indexOf("\n");
+          const body = nl === -1 ? part : part.slice(nl + 1);
+          return "<pre><code>" + body + "</code></pre>";
+        }
+        return part
+          .replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      }).join("");
+    }
+
+    function addMessage(role) {
+      empty.hidden = true;
+      const row = document.createElement("div");
+      row.className = "msg " + role;
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      row.appendChild(bubble);
+      log.appendChild(row);
+      return bubble;
+    }
+
+    function scrollDown() {
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function showMessages() {
+      log.innerHTML = "";
+      if (!messages.length) {
+        log.appendChild(empty);
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      messages.forEach(function (message) {
+        const bubble = addMessage(message.role);
+        if (message.role === "user") bubble.textContent = message.content || "";
+        else bubble.innerHTML = renderText(message.content || "");
+      });
+      scrollDown();
+    }
+
+    function whenLabel(updated) {
+      if (!updated) return "";
+      return new Date(updated * 1000).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+    }
+
+    async function saveCurrent() {
+      const gen = viewGen;
+      const snapshot = messages.slice();
+      const id = chatId;
+      if (!snapshot.some(function (message) { return message.role === "user" && (message.content || "").trim(); })) {
+        return id;
+      }
+      const response = await fetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: id, kind: "chat", messages: snapshot, refs: pinned })
+      });
+      const data = await response.json().catch(function () { return {}; });
+      if (data.saved && data.id && gen === viewGen) {
+        chatId = data.id;
+        localStorage.setItem("chat-current", chatId);
+      }
+      return data.id || id;
+    }
+
+    function renderPins() {
+      const line = document.getElementById("refsLine");
+      line.innerHTML = "";
+      if (!pinned.length) {
+        line.hidden = true;
+        return;
+      }
+      line.hidden = false;
+      line.appendChild(document.createTextNode("This chat can use "));
+      pinned.forEach(function (id) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.textContent = (titles[id] || "an earlier chat") + " ×";
+        chip.addEventListener("click", function () { unpinChat(id); });
+        line.appendChild(chip);
+      });
+    }
+
+    function referChat(id) {
+      if (!id || id === chatId || pinned.indexOf(id) >= 0) return;
+      pinned.push(id);
+      renderPins();
+      if (!history.hidden) refreshHistory();
+      saveCurrent();
+    }
+
+    function unpinChat(id) {
+      pinned = pinned.filter(function (item) { return item !== id; });
+      renderPins();
+      if (!history.hidden) refreshHistory();
+      saveCurrent();
+    }
+
+    async function refreshHistory() {
+      const response = await fetch("/api/chats?kind=chat");
+      const data = await response.json().catch(function () { return {}; });
+      const chats = data.chats || [];
+      chats.forEach(function (chat) { titles[chat.id] = chat.title || "Untitled"; });
+      history.innerHTML = "";
+      if (!chats.length) {
+        const note = document.createElement("p");
+        note.className = "history-empty";
+        note.textContent = "Past chats show up here after you send a message.";
+        history.appendChild(note);
+        return;
+      }
+      chats.forEach(function (chat) {
+        const row = document.createElement("div");
+        row.className = "history-row" + (chat.id === chatId ? " current" : "");
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "open";
+        open.textContent = chat.title || "Untitled";
+        open.addEventListener("click", function () { openChat(chat.id); });
+        const refer = document.createElement("button");
+        refer.type = "button";
+        refer.className = "remove";
+        refer.textContent = pinned.indexOf(chat.id) >= 0 ? "Using" : "Refer";
+        refer.disabled = chat.id === chatId;
+        refer.addEventListener("click", function () { referChat(chat.id); });
+        const when = document.createElement("span");
+        when.className = "when";
+        when.textContent = whenLabel(chat.updated);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "remove";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", function () { removeChat(chat.id); });
+        row.appendChild(open);
+        row.appendChild(refer);
+        row.appendChild(when);
+        row.appendChild(remove);
+        history.appendChild(row);
+      });
+    }
+
+    async function openChat(id) {
+      if (id === chatId && messages.length) {
+        history.hidden = false;
+        refreshHistory();
+        return;
+      }
+      if (controller) controller.abort();
+      await saveCurrent();
+      viewGen += 1;
+      const response = await fetch("/api/chats/" + id);
+      const data = await response.json().catch(function () { return {}; });
+      if (!response.ok || !Array.isArray(data.messages)) {
+        if (id === localStorage.getItem("chat-current")) {
+          chatId = "";
+          localStorage.removeItem("chat-current");
+        }
+        status.className = "status error";
+        status.textContent = data.error || "Could not open that chat.";
+        return;
+      }
+      chatId = data.id;
+      localStorage.setItem("chat-current", chatId);
+      messages = data.messages.filter(function (message) {
+        return message && (message.role === "user" || message.role === "assistant");
+      });
+      pinned = Array.isArray(data.refs) ? data.refs.filter(function (id) { return id && id !== chatId; }) : [];
+      showMessages();
+      if (pinned.length) await refreshHistory();
+      renderPins();
+      status.textContent = "";
+      status.className = "status";
+      meter.hidden = true;
+      if (!history.hidden) refreshHistory();
+      input.focus();
+    }
+
+    async function removeChat(id) {
+      await fetch("/api/chats/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: id })
+      });
+      if (id === chatId) {
+        chatId = "";
+        localStorage.removeItem("chat-current");
+        messages = [];
+        pinned = [];
+        showMessages();
+        renderPins();
+      }
+      pinned = pinned.filter(function (item) { return item !== id; });
+      renderPins();
+      refreshHistory();
+    }
+
+    async function startNewChat() {
+      if (controller) controller.abort();
+      await saveCurrent();
+      viewGen += 1;
+      chatId = "";
+      localStorage.removeItem("chat-current");
+      messages = [];
+      pinned = [];
+      showMessages();
+      renderPins();
+      status.textContent = "";
+      status.className = "status";
+      meter.hidden = true;
+      if (!history.hidden) refreshHistory();
+      input.focus();
+    }
+
+    function setBusy(busy) {
+      sendBtn.textContent = busy ? "Stop" : "Send";
+      sendBtn.disabled = false;
+      input.disabled = busy;
+    }
+
+    function formatDuration(seconds) {
+      seconds = Math.max(0, Math.floor(seconds));
+      const minutes = Math.floor(seconds / 60);
+      const rest = seconds % 60;
+      return minutes + ":" + (rest < 10 ? "0" : "") + rest;
+    }
+
+    function progressPercent(state) {
+      const phase = (state.phase || "").toLowerCase();
+      let floor = 8;
+      let cap = 22;
+      if (state.done) return 100;
+      if (state.waiting) { floor = 62; cap = 68; }
+      else if (phase.indexOf("running tests") >= 0) { floor = 88; cap = 95; }
+      else if (phase.indexOf("tests passed") >= 0 || phase.indexOf("saving") >= 0) { floor = 96; cap = 99; }
+      else if (phase.indexOf("agreed") >= 0) { floor = 40; cap = 48; }
+      else if (phase.indexOf("building") >= 0 || phase.indexOf("reading the project") >= 0) { floor = 50; cap = 72; }
+      else if (phase.indexOf("patch") >= 0 || phase.indexOf("trying") >= 0 || phase.indexOf("applying") >= 0) { floor = 74; cap = 86; }
+      else if (phase.indexOf("propos") >= 0 || phase.indexOf("fix") >= 0) { floor = 68; cap = 76; }
+      else if (phase.indexOf("speaking") >= 0 || phase.indexOf("talking") >= 0 || phase.indexOf("still") >= 0) { floor = 18; cap = 38; }
+      else if (phase.indexOf("reply") >= 0) { floor = 32; cap = 92; }
+      else if (phase.indexOf("starting") >= 0) { floor = 6; cap = 16; }
+      const span = cap - floor;
+      const fromChars = Math.min(span, Math.round((state.chars || 0) / 35));
+      const fromTime = Math.min(4, Math.floor((state.elapsed || 0) / 12));
+      return Math.min(cap, floor + Math.max(fromChars, fromTime));
+    }
+
+    function describeProgress(state) {
+      const elapsed = formatDuration(state.elapsed);
+      const quiet = formatDuration(state.quiet);
+      const pct = progressPercent(state);
+      const name = state.who || "";
+      let level = "";
+      let text;
+      if (state.waiting) {
+        text = "I'll wait. Tell me which way to go, or write your own, and I'll continue.";
+      } else if (state.quiet >= 120) {
+        level = "stuck";
+        text = "I haven't heard anything new for " + quiet + ". This looks stuck" + (name ? " while " + name + " is talking" : "") + ". Press Stop and we can try again.";
+      } else if (state.testing) {
+        text = "Almost done. I'm running the checks (" + elapsed + ").";
+      } else if (pct >= 85) {
+        text = "Almost done (" + elapsed + ").";
+      } else if (!state.chars && /start/i.test(state.phase || "") && state.quiet < 90) {
+        text = "Getting the model ready. The first words can take a minute (" + elapsed + ").";
+      } else if (state.quiet >= 25) {
+        level = "slow";
+        text = (name || "I") + (name ? " is" : "'m") + " still working, just quiet for " + quiet + ". I'll keep watching.";
+      } else if (name) {
+        text = name + " is talking it through (" + elapsed + ").";
+      } else if (state.chars) {
+        text = "Writing the reply (" + elapsed + ").";
+      } else {
+        text = "Working on it (" + elapsed + ").";
+      }
+      return { level: level, text: text, pct: pct };
+    }
+
+    async function reply() {
+      const gen = viewGen;
+      controller = new AbortController();
+      setBusy(true);
+      const bubble = addMessage("assistant");
+      let content = "";
+      let thinking = "";
+      let chars = 0;
+      let lessonNote = "";
+      const startedAt = Date.now();
+      let lastChunk = startedAt;
+      function paint() {
+        const now = Date.now();
+        const described = describeProgress({
+          elapsed: (now - startedAt) / 1000,
+          quiet: (now - lastChunk) / 1000,
+          chars: chars,
+          phase: chars ? "Replying" : "Starting the model",
+          who: "",
+          waiting: false,
+          testing: false
+        });
+        status.className = "status" + (described.level ? " " + described.level : "");
+        status.textContent = (lessonNote ? lessonNote + " " : "") + described.text;
+        meter.hidden = false;
+        meter.className = "meter" + (described.level ? " " + described.level : "") + (described.pct >= 85 ? " near" : "");
+        meterFill.style.width = described.pct + "%";
+        meterPct.textContent = described.pct + "%";
+        meter.setAttribute("aria-valuenow", String(described.pct));
+      }
+      const progressTimer = setInterval(paint, 1000);
+      paint();
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: MODEL,
+            messages: messages,
+            chatId: chatId,
+            refs: pinned,
+            stream: true,
+            think: false
+          })
+        });
+        if (!response.ok || !response.body) {
+          let message = "The local model did not answer (" + response.status + ").";
+          try {
+            const body = await response.json();
+            if (body.error) message = body.error;
+          } catch (ignore) {}
+          throw new Error(message);
+        }
+        const used = Number(response.headers.get("X-Lessons") || "0");
+        if (used > 0) {
+          lessonNote = "Using " + used + " lesson" + (used === 1 ? "" : "s") + " saved on this PC";
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const chunk = await reader.read();
+          if (gen !== viewGen) return;
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const data = JSON.parse(line);
+            if (data.error) throw new Error(data.error);
+            if (Array.isArray(data.references)) {
+              const titlesUsed = data.references.map(function (item) { return item.title; }).filter(Boolean);
+              if (titlesUsed.length) {
+                const note = "Using earlier chat" + (titlesUsed.length === 1 ? ": " : "s: ") + titlesUsed.join(", ") + ".";
+                lessonNote = lessonNote ? lessonNote + " " + note : note;
+                paint();
+              }
+              continue;
+            }
+            const piece = data.message || {};
+            if (piece.thinking) thinking += piece.thinking;
+            if (piece.content) content += piece.content;
+            if (piece.thinking || piece.content) {
+              chars += (piece.thinking || "").length + (piece.content || "").length;
+              lastChunk = Date.now();
+              paint();
+            }
+            bubble.innerHTML =
+              (thinking ? '<div class="thinking">' + escapeHtml(thinking) + "</div>" : "") +
+              renderText(content);
+            scrollDown();
+          }
+        }
+        if (gen !== viewGen) return;
+        if (!content && !thinking) {
+          bubble.textContent = "(No reply)";
+        }
+        messages.push({ role: "assistant", content: content });
+        saveCurrent();
+        clearInterval(progressTimer);
+        meter.hidden = false;
+        meter.className = "meter near";
+        meterFill.style.width = "100%";
+        meterPct.textContent = "100%";
+        meter.setAttribute("aria-valuenow", "100");
+        status.className = "status";
+        status.textContent = "That's the reply (" + formatDuration((Date.now() - startedAt) / 1000) + ").";
+      } catch (err) {
+        if (gen !== viewGen) return;
+        if (err.name === "AbortError") {
+          status.className = "status";
+          status.textContent = "Stopped.";
+          if (content) messages.push({ role: "assistant", content: content });
+          saveCurrent();
+        } else {
+          status.className = "status error";
+          status.textContent = err.message || "Could not reach the local model.";
+          if (!content) bubble.remove();
+        }
+      } finally {
+        clearInterval(progressTimer);
+        controller = null;
+        setBusy(false);
+        input.disabled = false;
+        input.focus();
+      }
+    }
+
+    document.getElementById("composer").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (controller) {
+        controller.abort();
+        return;
+      }
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      input.style.height = "auto";
+      messages.push({ role: "user", content: text });
+      const bubble = addMessage("user");
+      bubble.textContent = text;
+      scrollDown();
+      saveCurrent();
+      reply();
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById("composer").requestSubmit();
+      }
+    });
+
+    input.addEventListener("input", () => {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 160) + "px";
+    });
+
+    const stopModel = document.getElementById("stopModel");
+
+    async function refreshModel() {
+      try {
+        const response = await fetch("/api/model");
+        const data = await response.json();
+        stopModel.disabled = !data.running;
+        stopModel.textContent = data.running ? "Stop model" : "Model off";
+      } catch (err) {
+        stopModel.textContent = "Model off";
+      }
+    }
+
+    stopModel.addEventListener("click", async () => {
+      stopModel.disabled = true;
+      if (controller) controller.abort();
+      await fetch("/api/model/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      status.className = "status";
+      status.textContent = "Model stopped. It starts again when you send a message.";
+      refreshModel();
+    });
+    refreshModel();
+    setInterval(refreshModel, 20000);
+
+    document.getElementById("historyToggle").addEventListener("click", () => {
+      history.hidden = !history.hidden;
+      if (!history.hidden) refreshHistory();
+    });
+
+    document.getElementById("clear").addEventListener("click", () => {
+      startNewChat();
+    });
+
+    if (chatId) openChat(chatId);
+  </script>
+</body>
+</html>
